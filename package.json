@@ -1,0 +1,13 @@
+{
+  "name": "openvpn3-private-build",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node install.mjs",
+    "setup": "node install.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

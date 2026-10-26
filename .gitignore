@@ -1,0 +1,14 @@
+/.work/
+/dist/
+/node_modules/
+/private/*
+!/private/README.md
+*.ovpn
+*.key
+*.pem
+*.p12
+*.pfx
+.env*
+!.env.example
+.DS_Store
+Thumbs.db
