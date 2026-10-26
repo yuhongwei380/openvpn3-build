@@ -298,7 +298,8 @@ test('dependency setup returns the environment and propagates failures without s
   await fs.writeFile(helper, `import fs from 'node:fs';
 fs.writeFileSync(process.env.OPENVPN_BUILD_ENV_FILE, JSON.stringify({
   PATH: process.env.PATH || process.env.Path,
-  RUSTUP_TOOLCHAIN: 'fixture-toolchain'
+  RUSTUP_TOOLCHAIN: 'fixture-toolchain',
+  OPENSSL_ROOT_DIR: 'C:/fixture/OpenSSL With Spaces'
 }));`);
   await fs.writeFile(path.join(setupDirectory, nativePlatform === 'windows' ? 'setup.ps1' : 'setup.sh'),
     nativePlatform === 'windows'
@@ -306,9 +307,11 @@ fs.writeFileSync(process.env.OPENVPN_BUILD_ENV_FILE, JSON.stringify({
       : '#!/usr/bin/env bash\nset -euo pipefail\n"$OPENVPN_BUILD_NODE" fake-setup.mjs\n');
   const originalPath = process.env.PATH;
   const originalToolchain = process.env.RUSTUP_TOOLCHAIN;
+  const originalOpenSsl = process.env.OPENSSL_ROOT_DIR;
   try {
     await setupEnvironment({ root: f.root, platform: nativePlatform });
     assert.equal(process.env.RUSTUP_TOOLCHAIN, 'fixture-toolchain');
+    assert.equal(process.env.OPENSSL_ROOT_DIR, 'C:/fixture/OpenSSL With Spaces');
     assert.ok(process.env.PATH.startsWith(path.dirname(process.execPath) + path.delimiter));
     await fs.writeFile(helper, 'process.exit(17);');
     await assert.rejects(setupEnvironment({ root: f.root, platform: nativePlatform }), /exit 17/);
@@ -317,7 +320,16 @@ fs.writeFileSync(process.env.OPENVPN_BUILD_ENV_FILE, JSON.stringify({
     process.env.PATH = originalPath;
     if (originalToolchain === undefined) delete process.env.RUSTUP_TOOLCHAIN;
     else process.env.RUSTUP_TOOLCHAIN = originalToolchain;
+    if (originalOpenSsl === undefined) delete process.env.OPENSSL_ROOT_DIR;
+    else process.env.OPENSSL_ROOT_DIR = originalOpenSsl;
   }
+});
+
+test('Windows OpenSSL SDK discovery, Light 4.x isolation and archive integrity', { skip: process.platform !== 'win32' }, async (t) => {
+  const f = await fixture(t);
+  execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    path.join(projectRoot, 'tests/windows-openssl.Tests.ps1'), '-WorkDirectory', f.root],
+  { encoding: 'utf8', stdio: 'pipe', windowsHide: true });
 });
 
 test('native packaging dispatches the upstream script and collects this profile', { skip: !nativePlatform }, async (t) => {

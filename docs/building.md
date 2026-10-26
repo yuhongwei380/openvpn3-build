@@ -8,12 +8,14 @@
 
 ```text
 config/upstream.json         上游地址和固定的源码提交
+config/windows-openssl.json Windows 免安装 OpenSSL 3 SDK 版本、下载地址及 SHA-256
 private/client.ovpn         自己的配置，需自行放入，不提交 Git
 install.mjs                总入口：自动识别 OS、准备依赖并构建
 scripts/build.ps1           PowerShell 兼容入口，调用总入口
 scripts/build.sh            Bash 兼容入口，调用总入口
 scripts/build.mjs           底层构建流程，默认自动选择平台
-scripts/windows/setup.ps1   准备 Git 和 Rust MSVC
+scripts/windows/setup.ps1   准备 Git、Rust MSVC 和 OpenSSL x64 开发库
+scripts/windows/openssl.ps1 检测 SDK，下载校验并解压到项目缓存
 scripts/macos/setup.sh      准备 Homebrew 依赖、Rust 和库搜索路径
 scripts/windows/build.ps1   直接构建 Windows x64
 scripts/macos/build.sh      直接构建当前 Mac 架构的应用和 DMG
@@ -24,7 +26,7 @@ dist/<平台>/<构建编号>/     本次安装包及 build-info.json，不提交
 
 ## 构建前准备
 
-总入口需要 **Node.js 22+（包含 npm）**，无需先执行 `npm install`。Windows 缺少 Git 或 Rust 时通过 winget 安装，CMake、Visual Studio C++、OpenSSL 和头文件交给上游引擎脚本准备。macOS 使用已安装的 Homebrew 补齐原生依赖，缺少 rustup 时通过官方安装脚本安装；根据 Node.js 架构选择 Rust 工具链并配置 CMake/pkg-config 路径。环境路径只传递给当前构建进程，不写入 shell 配置文件；包管理器和安装器可能自行注册系统 PATH。首次构建会下载 npm、Cargo、OpenVPN 3 和驱动等依赖，需要网络。
+总入口需要 **Node.js 22+（包含 npm）**，无需先执行 `npm install`。Windows 缺少 Git 或 Rust 时通过 winget 安装；OpenSSL 3 x64 开发库由本仓库检测，缺失时下载固定版本的免安装 SDK，校验并解压到项目缓存，通过 `OPENSSL_ROOT_DIR` 传递实际目录。CMake、Visual Studio C++ 和头文件交给上游引擎脚本准备。macOS 使用已安装的 Homebrew 补齐原生依赖，缺少 rustup 时通过官方安装脚本安装；根据 Node.js 架构选择 Rust 工具链并配置 CMake/pkg-config 路径。环境路径只传递给当前构建进程，不写入 shell 配置文件；包管理器和安装器可能自行注册系统 PATH。首次构建会下载 npm、Cargo、OpenVPN 3 和驱动等依赖，需要网络。
 
 自动安装的工具会保留在系统中。`--no-auto-install-deps` 跳过总入口的环境安装，也关闭 Windows 上游的自动依赖安装。`--prepare-only` 完全跳过环境安装和编译，此时 Git 需要已安装。下面的手动准备步骤适用于自行管理环境的情况。
 
@@ -39,6 +41,12 @@ dist/<平台>/<构建编号>/     本次安装包及 build-info.json，不提交
 - Node.js 22+、Git、Rust stable MSVC（通过 rustup 安装）。
 - Visual Studio 2022 Build Tools，勾选“使用 C++ 的桌面开发”、MSVC x64 工具和 Windows SDK。
 - CMake、OpenSSL 开发库，以及 Asio、fmt 头文件。上游默认会尝试安装缺少的工具或下载头文件，可能触发系统授权；使用 `--no-auto-install-deps` 可关闭此行为并自行准备依赖。
+
+OpenSSL 必须包含 `include/openssl/ssl.h`、`libssl.lib` / `libcrypto.lib` 和 `bin/` 下的 OpenSSL 3 x64 DLL。脚本支持新 MSI 的 `C:\Program Files\OpenSSL`、旧 EXE 的 `C:\Program Files\OpenSSL-Win64`、自定义 `OPENSSL_ROOT_DIR` 及注册表安装位置，并校验 DLL 的 x64 架构；仅安装命令行运行时不够。
+
+旧版 winget 流程可能报 `ShiningLight.OpenSSL` / `-1978335212`（未找到包），也可能把已安装的 Light 4.x 匹配成 `ShiningLight.OpenSSL.Dev`，提示“已安装、无更新”却没有开发文件。当前流程不再通过 winget 安装 OpenSSL：已有完整 OpenSSL 3 x64 SDK 则复用，否则下载 [FireDaemon 提供的免安装发行包](https://kb.firedaemon.com/support/solutions/articles/4000121705)，校验 `config/windows-openssl.json` 固定的 SHA-256，再从 ZIP 中选择 x64 SDK。系统里的 Light/4.x 无需卸载，也不会被覆盖。更新本仓库后重新运行 `node install.mjs`，不需要删除源码缓存。
+
+默认 SDK 位于 `.work/windows/deps/openssl-3.5.9/sdk/x64/`，ZIP 也缓存于对应版本目录，重复执行直接复用。下载和缓存文件校验失败会停止；按报错提示删除损坏的 ZIP 后重试。升级 SDK 时，需要同时核对发行方公布的版本、ZIP 地址和 SHA-256，再更新 `config/windows-openssl.json`；保持 OpenSSL 3 和 x64，以匹配当前上游引擎。自动下载路径不需要管理员权限。SDK 中的许可证会复制到上游打包脚本收集的位置。
 
 可按实际安装位置指定上游依赖：
 
@@ -136,4 +144,6 @@ npm test
 
 ## 验证范围
 
-`npm test` 使用本地 Git 和打包夹具验证自动 OS 选择、总入口调度、安装选项、环境传递、源码获取、配置替换、固定版本升级、缓存保护、失败退出和安装包哈希归集，不下载依赖、不安装系统软件或驱动、不连接 VPN。完整 Windows 安装包、macOS 环境准备和应用仍需在各自系统上使用真实配置验证。
+`npm test` 使用本地 Git 和打包夹具验证自动 OS 选择、总入口调度、安装选项、环境传递、源码获取、配置替换、固定版本升级、缓存保护、失败退出和安装包哈希归集。Windows 回归测试还覆盖 Light 4.x 隔离、现有 SDK 复用、x64/ARM64/x86 区分、下载及缓存 SHA-256 校验和许可证位置。测试不下载依赖、不安装系统软件或驱动、不连接 VPN。
+
+另外已在 Windows PowerShell 5.1 下使用真实 SDK，通过 CMake、MSVC 编译并链接 OpenSSL，运行程序确认版本为 3.5.9。完整 Windows 安装包、macOS 环境准备和应用仍需在各自系统上使用真实配置验证。

@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $env:OPENVPN_BUILD_ENV_FILE -or -not $env:OPENVPN_BUILD_NODE) {
     throw 'Run node install.mjs from the repository root.'
 }
+. (Join-Path $PSScriptRoot 'openssl.ps1')
 
 function Refresh-BuildPath {
     $cargoDirectory = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE '.cargo' }
@@ -46,8 +47,10 @@ if (-not ($installed | Where-Object { $_ -match ('^' + [regex]::Escape($toolchai
 & rustup.exe run $toolchain cargo --version
 if ($LASTEXITCODE -ne 0) { throw 'The Rust MSVC toolchain is not usable.' }
 
-# The pinned upstream script installs/checks CMake, Visual Studio C++/SDK,
-# OpenSSL and Asio/fmt when it builds the native engine.
-$environment = @{ PATH = $env:PATH; RUSTUP_TOOLCHAIN = $toolchain } | ConvertTo-Json
+# Resolve the SDK here: winget may confuse Light 4.x with the development package.
+# Use an existing complete 3.x SDK or a pinned project-local portable SDK.
+$openSslRoot = Ensure-OpenSslSdk
+# The upstream script still prepares CMake, Visual Studio C++/SDK and Asio/fmt.
+$environment = @{ PATH = $env:PATH; RUSTUP_TOOLCHAIN = $toolchain; OPENSSL_ROOT_DIR = $openSslRoot } | ConvertTo-Json
 [IO.File]::WriteAllText($env:OPENVPN_BUILD_ENV_FILE, $environment, [Text.UTF8Encoding]::new($false))
-Write-Host 'Git and Rust are ready. Native Windows dependencies are handled by the upstream build.'
+Write-Host 'Git, Rust and the OpenSSL x64 SDK are ready. Remaining native dependencies are handled by the upstream build.'

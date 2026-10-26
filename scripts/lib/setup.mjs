@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { assertBuildHost } from './build.mjs';
 
-const environmentKeys = new Set(['PATH', 'RUSTUP_TOOLCHAIN', 'CMAKE_PREFIX_PATH', 'PKG_CONFIG_PATH']);
+const environmentKeys = new Set(['PATH', 'RUSTUP_TOOLCHAIN', 'CMAKE_PREFIX_PATH', 'PKG_CONFIG_PATH', 'OPENSSL_ROOT_DIR']);
 
 export async function setupEnvironment({ root, platform }) {
   assertBuildHost(platform);
